@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-web-app-deployment
+spec:
+  replicas: 4 # Число реплик (подов)
+  selector:
+    matchLabels:
+      app: my-web-app
+  template:
+    metadata:
+      labels:
+        app: my-web-app
+    spec:
+      containers:
+      - name: my-web-app
+        image: your-image:tag # Замените на имя и тег вашего контейнера
+        resources:
+          requests:
+            cpu: 1 # Запрашиваемые ресурсы CPU для первых запросов
+            memory: 128Mi # Запрашиваемая память
+          limits:
+            cpu: 0.1 # Максимальное потребление ресурсов CPU
+            memory: 128Mi # Ограничение потребления памяти
+        readinessProbe:
+          httpGet:
+            path: /health # Путь для проверки готовности приложения
+            port: 80 # Порт, на котором работает приложение
+          initialDelaySeconds: 10 # Задержка перед первой проверкой
+          periodSeconds: 5 # Периодичность проверки
+        livenessProbe:
+          httpGet:
+            path: /health # Путь для проверки жизнеспособности приложения
+            port: 80 # Порт, на котором работает приложение
+          initialDelaySeconds: 30 # Задержка перед первой проверкой
+          periodSeconds: 10 # Периодичность проверки
+        env:
+        - name: ENV_VAR1
+          value: value1 # Пример переменной окружения
+      nodeSelector:
+        beta.kubernetes.io/multi-zone: "true" # Выбор нод в мультизональном кластере
+  strategy:
+    type: RollingUpdate # Разворачиваем обновления с минимальным простоем
+    rollingUpdate:
+      maxUnavailable: 25% # Максимальное количество недоступных подов во время обновления
+      maxSurge: 25% # Максимальное количество Подов, превышающих желаемое количество, во время обновления
