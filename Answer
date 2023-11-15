@@ -1,0 +1,192 @@
+docker-compose.yml, который развертывает приложение на Python с использованием Flask и NoSQL базы данных MongoDB:
+
+version: '3'
+services:
+  flask-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - 8080:8080
+    depends_on:
+      - db
+  db:
+    image: mongo:latest
+    ports:
+      - 27017:27017
+    volumes:
+      - ./data:/data/db
+
+
+Создаём файл Dockerfile со следующим содержимым:
+
+FROM python:3.9
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+CMD [ "python", "app.py" ]
+
+
+Затем создаём файл app.py со следующим содержимым:
+
+from flask import Flask, request, jsonify
+from pymongo import MongoClient
+
+app = Flask(__name__)
+client = MongoClient('db', 27017)
+db = client.test_db
+
+@app.route('/', methods=['GET'])
+def hello():
+    return 'Hello, World!'
+
+@app.route('/api/key-value', methods=['GET', 'POST', 'PUT'])
+def key_value():
+    if request.method == 'GET':
+        key = request.args.get('key')
+        if key is None:
+            return jsonify({'error': 'Key is required'}), 400
+        value = db.key_value.find_one({'key': key})
+        if value is None:
+            return jsonify({'error': 'Key not found'}), 404
+        return jsonify({'key': value['key'], 'value': value['value']})
+
+    if request.method == 'POST':
+        key = request.json.get('key')
+        value = request.json.get('value')
+        if key is None or value is None:
+            return jsonify({'error': 'Key and value are required'}), 400
+        db.key_value.insert_one({'key': key, 'value': value})
+        return jsonify({'message': 'Key-value pair created'})
+
+    if request.method == 'PUT':
+        key = request.json.get('key')
+        value = request.json.get('value')
+        if key is None or value is None:
+            return jsonify({'error': 'Key and value are required'}), 400
+        result = db.key_value.update_one({'key': key}, {'$set': {'value': value}})
+        if result.modified_count == 0:
+            return jsonify({'error': 'Key not found'}), 404
+        return jsonify({'message': 'Key-value pair updated'})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080)
+
+
+Создаём файл requirements.txt, содержащий зависимости Flask и pymongo:
+
+Flask==2.0.1
+pymongo==3.12.0
+
+
+Поместим все эти файлы в одну и ту же директорию, затем запустм docker-compose up в этой директории. Это создаст два контейнера - один с Flask-приложением и второй с базой данных MongoDB. Приложение будет доступно по адресу http://localhost:8080. Можно использовать любой API-клиент для отправки запросов на создание, изменение и чтение ключ-значение пар в базе данных.
+
+
+Python скрипт:
+
+Потребуется использовать модуль psutil для мониторинга потребления памяти и модуль requests для отправки HTTP запросов на API.
+
+Вот пример скрипта:
+
+import psutil
+import requests
+
+# Задайте URL API для отправки запроса
+api_url = "https://your-api-url.com/alarm"
+
+# Задайте пороговое значение потребления памяти в процентах, при котором будет генерироваться alarm
+memory_threshold = 80
+
+# Функция для отправки HTTP запроса на API
+def send_alarm():
+    payload = {'message': 'High memory consumption!'}
+    try:
+        response = requests.post(api_url, data=payload)
+        response.raise_for_status()
+        print("Alarm sent successfully!")
+    except requests.exceptions.RequestException as e:
+        print("An error occurred while sending the alarm:", e)
+
+# Основной цикл для мониторинга потребления памяти
+while True:
+    # Получаем информацию о потреблении памяти
+    memory_percent = psutil.virtual_memory().percent
+    
+    # Если потребление памяти превышает заданный пороговый уровень, отправляем alarm
+    if memory_percent > memory_threshold:
+        send_alarm()
+    
+    # Задаем интервал между проверками потребления памяти (в секундах)
+    time.sleep(60)
+
+
+Скрипт мониторит потребление памяти каждые 60 секунд с помощью модуля psutil. Если потребление памяти превысит заданный пороговый уровень (80% в данном случае), скрипт отправляет HTTP POST запрос на указанный вами URL API с сообщением "High memory consumption!". Вам нужно заменить значение api_url на актуальный URL вашего API.
+
+
+Bash скрипт:
+
+#!/bin/bash
+
+# Пороговое значение (в процентах), при котором будет срабатывать alarm
+THRESHOLD=90
+
+# Адрес API, на который будет отправлен HTTP-запрос
+API_URL="https://example.com/api/alarm"
+
+# Функция для отправки HTTP-запроса на API
+function send_alarm {
+  local message="$1"
+  curl -X POST -H "Content-Type: application/json" -d "{\"message\":\"$message\"}" $API_URL
+}
+
+# Получение текущего значения потребления памяти
+memory_usage=$(free | awk '/Mem/{printf("%.2f"), $3/$2*100}')
+
+# Проверка, превышает ли потребление памяти пороговое значение
+if [[ $(echo "$memory_usage > $THRESHOLD" | bc -l) -eq 1 ]]; then
+  send_alarm "Потребление памяти превысило пороговое значение ($memory_usage%)"
+fi
+
+
+Можно настроить скрипт, изменив переменные THRESHOLD и API_URL в соответствии с требованиями. Помимо этого, можно изменить текст сообщения, отправляемого в HTTP-запросе, в функции send_alarm.
+
+Сохраним скрипт в файл с расширением .sh, например memory_monitor.sh, и выполним следующую команду в терминале, чтобы запустить скрипт:
+
+bash memory_monitor.sh
+
+
+Скрипт будет периодически проверять потребление памяти и, если оно превысит пороговое значение, отправит HTTP-запрос на указанный API.
+
+
+groovy скрипт: 
+
+
+@Grab(group='org.codehaus.groovy.modules.http-builder', module='http-builder', version='0.7.1')
+
+import groovyx.net.http.RESTClient
+
+def url = 'http://api.example.com/alarm'
+def threshold = 90 // Пороговое значение использования памяти для генерации alarm
+
+while (true) {
+    def memoryUsage = Runtime.runtime.totalMemory() - Runtime.runtime.freeMemory()
+    def memoryUsagePercentage = (memoryUsage / Runtime.runtime.maxMemory()) * 100
+
+    if (memoryUsagePercentage > threshold) {
+        def client = new RESTClient(url)
+        def response = client.post(contentType: 'application/json') {
+            json {
+                alarmType = 'memory'
+                message = "High memory usage: ${memoryUsagePercentage}%"
+            }
+        }
+
+        println "Alarm generated: ${response.status}"
+    }
+
+    sleep(60000) // Проверять использование памяти каждую минуту
+}
+
+
+Этот скрипт использует библиотеку http-builder для отправки http запросов. Он проверяет использование памяти каждую минуту и, если оно превышает пороговое значение, отправляет POST запрос на указанный API, генерируя alarm с информацией о высоком использовании памяти.
